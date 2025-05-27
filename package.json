@@ -1,0 +1,12 @@
+{
+    "name": "shipping-vat-test",
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+      "test": "vitest"
+    },
+    "devDependencies": {
+      "typescript": "^5.3.2",
+      "vitest": "^0.34.6"
+    }
+  }
