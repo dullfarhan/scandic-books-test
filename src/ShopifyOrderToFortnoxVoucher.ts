@@ -48,11 +48,50 @@ export function getOrdersGroupToVoucher({
         vatTotals[vatRate].sales_vat += vatAmount;
       });
     });
-
-    // TODO: distribute shipping lines across VAT rates proportionally
-    //       Update vatTotals so shipping cost is allocated to the same VAT
-    //       percentages as the line items.
   });
+
+// Calculate the total shipping cost across all orders
+const totalShippingCost = groupedOrders.orders.reduce(
+  (orderSum, order) => {
+    const orderShippingCost = order.shipping_lines.reduce(
+      (shippingSum, shippingLine) => shippingSum + shippingLine.price, 
+      0
+    );
+    return orderSum + orderShippingCost;
+  },
+  0
+);
+
+// if there's actually shipping cost to distribute
+if (totalShippingCost > 0) {
+  // Find the total net sales to calculate proportions
+  const totalNetSales = Object.values(vatTotals).reduce(
+    (total, vatCategory) => total + vatCategory.sales_net,
+    0
+  );
+
+  // Only distribute if we have sales to base the proportion on
+  if (totalNetSales > 0) {
+    // Go through each VAT rate and allocate shipping proportionally
+    Object.keys(vatTotals).forEach((vatRateKey) => {
+      const currentVatRate = parseFloat(vatRateKey);
+      
+      // Calculate what percentage of total sales this VAT rate represents
+      const salesProportion = vatTotals[currentVatRate].sales_net / totalNetSales;
+      
+      // Allocate shipping cost based on this proportion
+      const allocatedShipping = totalShippingCost * salesProportion;
+      
+      // Split the allocated shipping into net amount and VAT
+      const vatOnShipping = allocatedShipping * currentVatRate;
+      const netShippingAmount = allocatedShipping - vatOnShipping;
+      
+      // Add the shipping amounts to the existing totals for this VAT rate
+      vatTotals[currentVatRate].sales_net += netShippingAmount;
+      vatTotals[currentVatRate].sales_vat += vatOnShipping;
+    });
+  }
+}
 
   const rows: VoucherRow[] = [
     {
@@ -93,21 +132,24 @@ export function getOrdersGroupToVoucher({
     });
   }
 
-  if (config.accounts.order_shipping) {
-    const shipping = groupedOrders.orders.reduce(
-      (sum, order) =>
-        sum + order.shipping_lines.reduce((s, sl) => s + sl.price, 0),
-      0
-    );
-    if (shipping > 0) {
-      rows.push({
-        Account: config.accounts.order_shipping,
-        Credit: shipping,
-        TransactionInformation: "Shipping",
-        Quantity: 1,
-      });
-    }
-  }
+  // Commented the separate shipping account handling 
+  // shipping is  distributed now
+  // across the VAT rate accounts above
+  //   if (config.accounts.order_shipping) {
+  //   const shipping = groupedOrders.orders.reduce(
+  //     (sum, order) =>
+  //       sum + order.shipping_lines.reduce((s, sl) => s + sl.price, 0),
+  //     0
+  //   );
+  //   if (shipping > 0) {
+  //     rows.push({
+  //       Account: config.accounts.order_shipping,
+  //       Credit: shipping,
+  //       TransactionInformation: "Shipping",
+  //       Quantity: 1,
+  //     });
+  //   }
+  // }
 
   const voucher: Voucher = {
     VoucherRows: rows,
